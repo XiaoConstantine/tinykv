@@ -24,7 +24,7 @@ func NewStandAloneStorage(conf *config.Config) *StandAloneStorage {
 }
 
 func (s *StandAloneStorage) Start() error {
-    // Nothing to do here
+	// Nothing to do here
 	return nil
 }
 
@@ -52,4 +52,20 @@ func (s *StandAloneStorage) Write(ctx *kvrpcpb.Context, batch []storage.Modify) 
 		}
 	}
 	return nil
+}
+
+type standAloneStorageReader struct {
+	Kv        *badger.DB
+	iterCount int
+}
+
+func (ssr *standAloneStorageReader) GetCF(cf string, key []byte) ([]byte, error) {
+	return nil, nil
+}
+
+func (ssr *standAloneStorageReader) IterCF(cf string) engine_util.DBIterator {
+	return nil
+}
+
+func (ssr *standAloneStorageReader) Close() {
 }
