@@ -24,7 +24,7 @@ func NewStandAloneStorage(conf *config.Config) *StandAloneStorage {
 }
 
 func (s *StandAloneStorage) Start() error {
-	// Your Code Here (1).
+    // Nothing to do here
 	return nil
 }
 
