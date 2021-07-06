@@ -62,8 +62,8 @@ type Config struct {
 	// elections. That is, if a follower does not receive any message from the
 	// leader of current term before ElectionTick has elapsed, it will become
 	// candidate and start an election. ElectionTick must be greater than
-	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid 
-    // unnecessary leader switching.
+	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
+	// unnecessary leader switching.
 	ElectionTick int
 	// HeartbeatTick is the number of Node.Tick invocations that must pass between
 	// heartbeats. That is, a leader sends heartbeat messages to maintain its
@@ -187,13 +187,22 @@ func (r *Raft) tick() {
 	switch r.State {
 	case StateFollower:
 		r.electionElapsed += 1
-		r.heartbeatElapsed += 1
+		if r.electionElapsed >= r.electionTimeout {
+			r.electionElapsed = 0
+			r.Step(pb.Message{
+				MsgType: pb.MessageType_MsgHup,
+			})
+		}
 	case StateCandidate:
-		r.electionElapsed = 0
-		r.heartbeatElapsed += 1
+		r.electionElapsed += 1
 	case StateLeader:
 		r.heartbeatElapsed += 1
-		r.electionElapsed += 1
+		if r.heartbeatElapsed >= r.heartbeatTimeout {
+			r.heartbeatElapsed = 0
+			r.Step(pb.Message{
+				MsgType: pb.MessageType_MsgBeat,
+			})
+		}
 	}
 }
 
