@@ -17,6 +17,7 @@ package raft
 import (
 	"errors"
 
+	"github.com/pingcap-incubator/tinykv/log"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
 
@@ -61,8 +62,8 @@ type Config struct {
 	// elections. That is, if a follower does not receive any message from the
 	// leader of current term before ElectionTick has elapsed, it will become
 	// candidate and start an election. ElectionTick must be greater than
-	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
-	// unnecessary leader switching.
+	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid 
+    // unnecessary leader switching.
 	ElectionTick int
 	// HeartbeatTick is the number of Node.Tick invocations that must pass between
 	// heartbeats. That is, a leader sends heartbeat messages to maintain its
@@ -164,8 +165,9 @@ func newRaft(c *Config) *Raft {
 	if err := c.validate(); err != nil {
 		panic(err.Error())
 	}
-	// Your Code Here (2A).
-	return nil
+	return &Raft{
+		id: c.ID,
+	}
 }
 
 // sendAppend sends an append RPC with new entries (if any) and the
@@ -182,7 +184,17 @@ func (r *Raft) sendHeartbeat(to uint64) {
 
 // tick advances the internal logical clock by a single tick.
 func (r *Raft) tick() {
-	// Your Code Here (2A).
+	switch r.State {
+	case StateFollower:
+		r.electionElapsed += 1
+		r.heartbeatElapsed += 1
+	case StateCandidate:
+		r.electionElapsed = 0
+		r.heartbeatElapsed += 1
+	case StateLeader:
+		r.heartbeatElapsed += 1
+		r.electionElapsed += 1
+	}
 }
 
 // becomeFollower transform this peer's state to Follower
@@ -193,6 +205,18 @@ func (r *Raft) becomeFollower(term uint64, lead uint64) {
 // becomeCandidate transform this peer's state to candidate
 func (r *Raft) becomeCandidate() {
 	// Your Code Here (2A).
+	r.Term += 1
+	r.Vote += 1
+	r.msgs = append(r.msgs, pb.Message{
+		MsgType: pb.MessageType_MsgRequestVote,
+		To:      0,
+		From:    r.id,
+		Term:    r.Term,
+		LogTerm: 0,
+		Index:   0,
+		Entries: []*pb.Entry{},
+		Commit:  0,
+	})
 }
 
 // becomeLeader transform this peer's state to leader
@@ -205,10 +229,92 @@ func (r *Raft) becomeLeader() {
 // on `eraftpb.proto` for what msgs should be handled
 func (r *Raft) Step(m pb.Message) error {
 	// Your Code Here (2A).
+	/**
+	 * Follower:
+	 *   electionTimeout tick
+	 *   heart beat tick
+	 *   if electionTimeout:
+	 *      transit => Candidate
+	 *   rpc: HeartBeatReq & AppendEntries
+	 *          heartbeatTimeout reset & append log entry
+	 *        RequestVote(req: RequestVote)
+	 *          if term < req.term => vote for requester
+	 *                                update term == req.term
+	 *                                reset electionTimeout = 0
+	 * Candidate:
+	 *   term++
+	 *   vote++(self vote)
+	 *   rpc: RequestVote(req: RequestVote)
+	 *
+	 * Leader:
+	 *   rpc: AppendEntries to followers
+	 *        HeartBeatReq
+	 *
+	 * */
 	switch r.State {
 	case StateFollower:
+		switch m.MsgType {
+		case pb.MessageType_MsgHeartbeat:
+			r.msgs = append(r.msgs, pb.Message{
+				MsgType: pb.MessageType_MsgHeartbeatResponse,
+				To:      m.From,
+				From:    m.To,
+				Term:    m.Term,
+				LogTerm: m.LogTerm,
+				Reject:  false,
+			})
+			// reset heart beat
+			r.heartbeatElapsed = 0
+		case pb.MessageType_MsgRequestVote:
+			// Vote for requester
+			if r.Term < m.Term {
+				r.msgs = append(r.msgs, pb.Message{
+					MsgType: pb.MessageType_MsgRequestVoteResponse,
+					To:      m.From,
+					From:    m.To,
+					Term:    m.Term,
+					Reject:  false,
+				})
+			} else {
+				r.msgs = append(r.msgs, pb.Message{
+					MsgType: pb.MessageType_MsgRequestVoteResponse,
+					To:      m.From,
+					From:    m.To,
+					Term:    r.Term,
+					Reject:  true,
+				})
+			}
+			// Reset Election timeout
+			r.electionElapsed = 0
+		}
 	case StateCandidate:
+		switch m.MsgType {
+		case pb.MessageType_MsgRequestVoteResponse:
+		case pb.MessageType_MsgRequestVote:
+			r.msgs = append(r.msgs, pb.Message{
+				MsgType:              pb.MessageType_MsgRequestVoteResponse,
+				To:                   m.From,
+				From:                 m.To,
+				Term:                 r.Term,
+				LogTerm:              0,
+				Index:                0,
+				Entries:              []*pb.Entry{},
+				Commit:               0,
+				Snapshot:             &pb.Snapshot{},
+				Reject:               true,
+				XXX_NoUnkeyedLiteral: struct{}{},
+				XXX_unrecognized:     []byte{},
+				XXX_sizecache:        0,
+			})
+		}
 	case StateLeader:
+		switch m.MsgType {
+		case pb.MessageType_MsgTimeoutNow:
+			r.tick()
+			r.becomeCandidate()
+		case pb.MessageType_MsgTransferLeader:
+			r.tick()
+		}
 	}
 	return nil
 }
