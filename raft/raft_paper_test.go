@@ -31,6 +31,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/pingcap-incubator/tinykv/log"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
 
@@ -191,6 +192,7 @@ func TestLeaderElectionInOneRoundRPC2AA(t *testing.T) {
 		r := newTestRaft(1, idsBySize(tt.size), 10, 1, NewMemoryStorage())
 
 		r.Step(pb.Message{From: 1, To: 1, MsgType: pb.MessageType_MsgHup})
+        log.Infof("state: %s", r.State)
 		for id, vote := range tt.votes {
 			r.Step(pb.Message{From: id, To: 1, Term: r.Term, MsgType: pb.MessageType_MsgRequestVoteResponse, Reject: !vote})
 		}

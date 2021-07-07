@@ -116,3 +116,12 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	}
 	return term, nil
 }
+
+
+func (l *RaftLog) maybeAppend(preLogIndex uint64, prevLogTerm uint64, commit uint64, entries ...pb.Entry) (lastIdx uint64, accept bool) {
+	if term, err := l.Term(preLogIndex); err != nil || term != prevLogTerm {
+		return 0, false
+	}
+    return l.LastIndex(), true
+
+}
