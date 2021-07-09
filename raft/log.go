@@ -107,6 +107,16 @@ func (l *RaftLog) LastIndex() uint64 {
 	return lastIdx
 }
 
+func (l *RaftLog) FirstIndex() uint64 {
+	// Your Code Here (2A).
+	firstIdx, err := l.storage.FirstIndex()
+	if err != nil {
+		log.Errorf("Failed to grab last index of storage")
+		return 0
+	}
+	return firstIdx
+}
+
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	term, err := l.storage.Term(i)
@@ -115,6 +125,10 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 		return 0, err
 	}
 	return term, nil
+}
+
+func (l *RaftLog) append(entries...pb.Entry) {
+    l.entries = append(l.entries, entries...)
 }
 
 
